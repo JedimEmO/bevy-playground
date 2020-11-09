@@ -13,19 +13,25 @@ fn main() {
         .add_system(friction_system.system())
         .add_system(mouse_system.system())
         .add_system(fire_system.system())
+        .add_system(kill_system.system())
         .run();
+}
+
+struct Lifespan {
+    kill_at: f64,
 }
 
 struct Velocity {
     magnitude: Vec3,
     last_change: f64,
-    no_friction: bool
+    no_friction: bool,
 }
 
 struct Shooter {
     pew_handle: Handle<ColorMaterial>,
     shoot_direction: Vec2,
-    shoot_angle: f32
+    shoot_angle: f32,
+    last_shot_at: f64,
 }
 
 fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>, asset_server: Res<AssetServer>) {
@@ -43,7 +49,8 @@ fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>, a
         .with(Shooter {
             pew_handle: materials.add(pew.into()),
             shoot_direction: Default::default(),
-            shoot_angle: 0.0
+            shoot_angle: 0.0,
+            last_shot_at: 0.0,
         });
 }
 
@@ -53,28 +60,41 @@ fn mouse_system(mut state: Local<EventReader<CursorMoved>>, events: Res<Events<C
             let view_dir_vec: Vec2 = (event.position - Vec2::new(1280.0 / 2.0, 400.0)) - Vec2::new(t.translation.x(), t.translation.y());
             let angle = view_dir_vec.angle_between(Vec2::new(1.0, 0.0));
 
-            t.rotation = Quat::from_rotation_z(-angle - PI / 2.0);
+            t.rotation = Quat::from_rotation_z(-angle - PI / 2.0);aw
             shooter.shoot_direction = view_dir_vec;
             shooter.shoot_angle = -angle;
         }
     }
 }
 
-fn fire_system(mut commands: Commands, mut state: Local<EventReader<MouseButtonInput>>, events: Res<Events<MouseButtonInput>>, mut query: Query<(&mut Transform, &Shooter)>) {
+fn kill_system(mut commands: Commands, time: Res<Time>, query: Query<(Entity, &Lifespan)>) {
+    for (entity, lifespan) in query.iter() {
+        if time.seconds_since_startup >= lifespan.kill_at {
+            commands.despawn(entity);
+        }
+    }
+}
+
+fn fire_system(mut commands: Commands, time: Res<Time>, mut state: Local<EventReader<MouseButtonInput>>, events: Res<Events<MouseButtonInput>>, mut query: Query<(&mut Transform, &mut Shooter)>) {
     for event in state.iter(&events) {
         if event.button == MouseButton::Left {
-            for (mut t, shooter) in query.iter_mut() {
-                let mut transform = Transform::from_rotation(Quat::from_rotation_z(shooter.shoot_angle));
-                let dir = Vec3::new(shooter.shoot_direction.x(), shooter.shoot_direction.y(), 0.0);
+            for (mut t, mut shooter) in query.iter_mut() {
+                if time.seconds_since_startup - shooter.last_shot_at > 0.1 {
+                    shooter.last_shot_at = time.seconds_since_startup;
 
-                transform.translation = t.translation.clone() + dir.normalize() * 50.0;
+                    let mut transform = Transform::from_rotation(Quat::from_rotation_z(shooter.shoot_angle));
+                    let dir = Vec3::new(shooter.shoot_direction.x(), shooter.shoot_direction.y(), 0.0);
 
-                commands.spawn(SpriteComponents {
-                    material: shooter.pew_handle.clone(),
-                    transform,
-                    ..Default::default()
-                })
-                .with(Velocity { magnitude: dir.normalize() * 2000.0, last_change: 0.0, no_friction: true });
+                    transform.translation = t.translation.clone() + dir.normalize() * 50.0;
+
+                    commands.spawn(SpriteComponents {
+                        material: shooter.pew_handle.clone(),
+                        transform,
+                        ..Default::default()
+                    })
+                        .with(Velocity { magnitude: dir.normalize() * 2000.0, last_change: 0.0, no_friction: true })
+                        .with(Lifespan { kill_at: time.seconds_since_startup + 0.5 });
+                }
             }
         }
     }

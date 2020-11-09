@@ -60,7 +60,7 @@ fn mouse_system(mut state: Local<EventReader<CursorMoved>>, events: Res<Events<C
             let view_dir_vec: Vec2 = (event.position - Vec2::new(1280.0 / 2.0, 400.0)) - Vec2::new(t.translation.x(), t.translation.y());
             let angle = view_dir_vec.angle_between(Vec2::new(1.0, 0.0));
 
-            t.rotation = Quat::from_rotation_z(-angle - PI / 2.0);aw
+            t.rotation = Quat::from_rotation_z(-angle - PI / 2.0);
             shooter.shoot_direction = view_dir_vec;
             shooter.shoot_angle = -angle;
         }
